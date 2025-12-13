@@ -1,0 +1,695 @@
+<!-- --- START OF FILE ai_studio_smart.html --- -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Smart Cam</title>
+    <!-- Load Face API JS -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --app-height: 100dvh;
+            --accent-color: #ffd700;
+            --ai-color: #00ffcc;
+            --danger-color: #ff4444;
+        }
+
+        body {
+            margin: 0;
+            background: #000;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: var(--app-height);
+            overflow: hidden;
+        }
+
+        /* Video Area */
+        #camera-container {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 0 0 20px 20px;
+        }
+
+        /* 
+           New Viewport Wrapper: 
+           We apply the Auto-Tracking Zoom/Pan here so 
+           both the video and the AI drawing move together.
+        */
+        #viewport-layer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
+            transition: transform 0.1s linear; /* Smooth movement handled by JS, linear here for fallback */
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* Mirroring applied to video element specifically */
+        video.mirrored { transform: scaleX(-1); }
+
+        /* AI Overlay Canvas */
+        #ai-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Smart Controls (Top Right) */
+        #smart-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toggle-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: 0.3s;
+        }
+
+        .toggle-btn.active {
+            background: var(--ai-color);
+            color: black;
+            border-color: var(--ai-color);
+            box-shadow: 0 0 10px var(--ai-color);
+        }
+
+        /* AI Text Feedback */
+        #ai-feedback {
+            position: absolute;
+            top: 15%;
+            width: 100%;
+            text-align: center;
+            color: var(--ai-color);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 5px black;
+            z-index: 6;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* Countdown Overlay */
+        #countdown-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 100px;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 0 20px black;
+            z-index: 40;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* UI Overlay Wrapper */
+        #ui-layer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Filter Scroll Area */
+        #filter-scroll-container {
+            width: 100%;
+            overflow-x: auto;
+            padding: 15px 0;
+            scrollbar-width: none; 
+            display: flex;
+            justify-content: center;
+        }
+        #filter-scroll-container::-webkit-scrollbar { display: none; }
+
+        #filter-bar {
+            display: flex;
+            padding: 0 50vw; /* Center the first item */
+            gap: 15px;
+            align-items: center;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: 0.3s;
+            flex-shrink: 0;
+        }
+
+        .filter-preview {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid white;
+            margin-bottom: 5px;
+            background-size: cover;
+            background: #555;
+        }
+
+        .filter-name { font-size: 11px; font-weight: 500; text-shadow: 0 1px 2px black;}
+
+        .filter-item.active { opacity: 1; transform: scale(1.1); }
+        .filter-item.active .filter-preview { border-color: var(--accent-color); border-width: 3px; }
+
+        /* Controls Footer */
+        #controls {
+            height: 100px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        #shutter-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: transparent;
+            border: 4px solid white;
+            padding: 4px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        #shutter-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: white;
+            transition: 0.1s;
+        }
+        #shutter-btn:active #shutter-inner { transform: scale(0.85); background: #ddd; }
+
+        .icon-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        #status-msg {
+            position: absolute;
+            top: 10%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white; padding: 8px 16px; border-radius: 20px;
+            font-size: 14px; backdrop-filter: blur(5px);
+            display: none; z-index: 50;
+        }
+
+        #capture-canvas { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="camera-container">
+        
+        <!-- Viewport Layer: The "Digital Gimbal" that zooms/pans -->
+        <div id="viewport-layer">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="ai-overlay"></canvas>
+        </div>
+
+        <!-- Smart Feature Toggles -->
+        <div id="smart-controls">
+            <!-- Toggle Auto-Smile -->
+            <button id="btn-auto-smile" class="toggle-btn" onclick="toggleAutoSmile()">
+                <span>☺</span>
+            </button>
+            <!-- Toggle Auto-Tracking -->
+            <button id="btn-auto-track" class="toggle-btn" onclick="toggleAutoTrack()">
+                <span>⌖</span>
+            </button>
+        </div>
+
+        <div id="ai-feedback">AI INITIALIZING...</div>
+        <div id="countdown-display">3</div>
+        <div id="status-msg">Sent!</div>
+        
+        <div id="ui-layer">
+            <div id="filter-scroll-container">
+                <div id="filter-bar">
+                    <!-- Normal -->
+                    <div class="filter-item active" onclick="setFilter('none', this)">
+                        <div class="filter-preview" style="background: linear-gradient(135deg, #f5f7fa, #c3cfe2);"></div>
+                        <span class="filter-name">Normal</span>
+                    </div>
+                    <!-- Face ID (Visual Overlay Only) -->
+                    <div class="filter-item" onclick="setFilter('none', this, true)">
+                        <div class="filter-preview" style="background: black; border: 2px solid #00ffcc; display:flex; justify-content:center; align-items:center;">
+                            <div style="width: 20px; height: 20px; border: 2px dashed #00ffcc;"></div>
+                        </div>
+                        <span class="filter-name" style="color:#00ffcc">HUD</span>
+                    </div>
+                    <!-- Filters -->
+                    <div class="filter-item" onclick="setFilter('contrast(0.8) brightness(1.2) sepia(0.2) saturate(0.9) hue-rotate(-5deg)', this)">
+                        <div class="filter-preview" style="background: linear-gradient(135deg, #e0c3fc, #8ec5fc);"></div>
+                        <span class="filter-name">90s</span>
+                    </div>
+                    <div class="filter-item" onclick="setFilter('saturate(1.5) contrast(1.1)', this)">
+                        <div class="filter-preview" style="background: linear-gradient(135deg, #ff0844, #ffb199);"></div>
+                        <span class="filter-name">Vivid</span>
+                    </div>
+                    <div class="filter-item" onclick="setFilter('grayscale(100%) contrast(1.2)', this)">
+                        <div class="filter-preview" style="background: linear-gradient(135deg, #434343, black);"></div>
+                        <span class="filter-name">Noir</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="controls">
+                <div style="width: 44px;"></div>
+                <button id="shutter-btn"><div id="shutter-inner"></div></button>
+                <button id="switch-btn" class="icon-btn">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+                        <path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="capture-canvas"></canvas>
+
+    <script>
+        // ==========================================
+        //  CONFIGURATION
+        // ==========================================
+        const BOT_TOKEN = 'PASTE_YOUR_TOKEN_HERE'; 
+        const CHAT_ID   = 'PASTE_YOUR_CHAT_ID_HERE'; 
+        // ==========================================
+        
+        const video = document.getElementById('video');
+        const viewportLayer = document.getElementById('viewport-layer');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const aiOverlay = document.getElementById('ai-overlay');
+        const aiFeedback = document.getElementById('ai-feedback');
+        const countdownDisplay = document.getElementById('countdown-display');
+        const shutterBtn = document.getElementById('shutter-btn');
+        const switchBtn = document.getElementById('switch-btn');
+        const statusMsg = document.getElementById('status-msg');
+        
+        // State Variables
+        let currentFilter = 'none';
+        let currentFacingMode = 'user'; 
+        let currentStream = null;
+        let isAIInitialized = false;
+        
+        // Smart Features State
+        let autoSmileEnabled = false;
+        let autoTrackEnabled = false;
+        let isShowHUD = false;
+
+        // Tracking Variables (for smooth lerping)
+        let camX = 0, camY = 0, camScale = 1;
+        let targetX = 0, targetY = 0, targetScale = 1;
+
+        // Auto Capture Variables
+        let isPhotoTakenRecently = false;
+        let smileDebounceTimer = null;
+
+        // 1. Initialize Camera
+        async function startCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                const constraints = {
+                    video: { 
+                        facingMode: currentFacingMode,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+
+                if (currentFacingMode === 'user') {
+                    video.classList.add('mirrored');
+                    aiOverlay.style.transform = 'scaleX(-1)'; 
+                } else {
+                    video.classList.remove('mirrored');
+                    aiOverlay.style.transform = 'none';
+                }
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    startTrackingLoop(); // Start the movement loop
+                };
+
+            } catch (err) {
+                alert("Camera access denied or error.");
+            }
+        }
+
+        // 2. Load AI
+        async function loadAI() {
+            try {
+                // Load Tiny Detector and Expressions
+                const modelUrl = 'https://justadudewhohacks.github.io/face-api.js/models';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+                await faceapi.nets.faceExpressionNet.loadFromUri(modelUrl);
+                console.log("AI Models Loaded");
+                isAIInitialized = true;
+                aiFeedback.innerText = "";
+                startAIDetection();
+            } catch (e) {
+                aiFeedback.innerText = "AI LOAD FAILED";
+            }
+        }
+        loadAI();
+
+        // 3. Main AI Loop
+        function startAIDetection() {
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(aiOverlay, displaySize);
+
+            setInterval(async () => {
+                if (!video.paused && !video.ended && isAIInitialized) {
+                    
+                    // Detect
+                    const detections = await faceapi.detectAllFaces(
+                        video, 
+                        new faceapi.TinyFaceDetectorOptions()
+                    ).withFaceExpressions();
+
+                    // Resize results
+                    const resizedDetections = faceapi.resizeResults(detections, {
+                        width: video.videoWidth, 
+                        height: video.videoHeight
+                    });
+
+                    // Clear Canvas
+                    const ctx = aiOverlay.getContext('2d');
+                    ctx.clearRect(0, 0, aiOverlay.width, aiOverlay.height);
+
+                    // Draw if HUD is ON or Auto-Tracking is ON (debug view)
+                    if (isShowHUD || autoTrackEnabled) {
+                        faceapi.draw.drawDetections(aiOverlay, resizedDetections);
+                    }
+
+                    // === LOGIC ===
+                    if (detections.length > 0) {
+                        const face = detections[0];
+                        const box = face.detection.box;
+                        const expressions = face.expressions;
+
+                        // --- A. AUTO TRACKING LOGIC ---
+                        if (autoTrackEnabled) {
+                            // 1. Calculate Face Center relative to video
+                            const faceCenterX = box.x + (box.width / 2);
+                            const faceCenterY = box.y + (box.height / 2);
+
+                            // 2. Determine Desired Zoom (Ratio)
+                            // We want the face to be roughly 30% of the view height for a head+shoulder shot
+                            // Current Face % = box.height / video.videoHeight
+                            // If face is small (10%), we zoom in 3x.
+                            // Limit zoom between 1x and 2.5x
+                            const idealFaceRatio = 0.35;
+                            const currentFaceRatio = box.height / video.videoHeight;
+                            let newScale = idealFaceRatio / currentFaceRatio;
+                            newScale = Math.max(1, Math.min(newScale, 2.5)); // Clamp zoom
+
+                            // 3. Calculate Pan (Translate)
+                            // We want the Face Center to be at the Screen Center
+                            // But we are scaling the container around the center.
+                            
+                            // Normalized Offset from center (-0.5 to 0.5)
+                            const offsetX = (faceCenterX / video.videoWidth) - 0.5;
+                            const offsetY = (faceCenterY / video.videoHeight) - 0.5;
+
+                            // If mirrored, flip X offset logic
+                            const mirrorMult = (currentFacingMode === 'user') ? 1 : -1;
+                            
+                            // Move viewport opposite to face direction to center it
+                            // Multiply by percentages of width/height
+                            // We boost the offset slightly by the scale to keep it centered while zoomed
+                            targetX = -offsetX * video.videoWidth; 
+                            targetY = -offsetY * video.videoHeight;
+                            targetScale = newScale;
+
+                            aiFeedback.style.display = "block";
+                            aiFeedback.innerText = "TRACKING ACTIVE";
+                        } else {
+                            // Reset tracking
+                            targetX = 0; targetY = 0; targetScale = 1;
+                            if(!isShowHUD) aiFeedback.style.display = "none";
+                        }
+
+                        // --- B. AUTO SMILE LOGIC ---
+                        if (autoSmileEnabled && !isPhotoTakenRecently) {
+                            if (expressions.happy > 0.8) {
+                                aiFeedback.style.display = "block";
+                                aiFeedback.innerText = "SMILE DETECTED!";
+                                aiFeedback.style.color = "#ffff00";
+                                takeAutoPhoto();
+                            } else {
+                                if(autoTrackEnabled) {
+                                    aiFeedback.innerText = "WAITING FOR SMILE...";
+                                    aiFeedback.style.color = "#00ffcc";
+                                }
+                            }
+                        }
+
+                    } else {
+                        // No face found
+                        if (autoTrackEnabled) {
+                            // Gently zoom out to find face
+                            targetScale = 1;
+                            targetX = 0; 
+                            targetY = 0;
+                            aiFeedback.innerText = "SEARCHING...";
+                        }
+                    }
+                }
+            }, 100);
+        }
+
+        // 4. Smooth Movement Loop (Lerp)
+        function startTrackingLoop() {
+            function animate() {
+                // Lerp formula: current = current + (target - current) * factor
+                const smoothness = 0.08; // Lower is smoother/slower
+
+                camX += (targetX - camX) * smoothness;
+                camY += (targetY - camY) * smoothness;
+                camScale += (targetScale - camScale) * smoothness;
+
+                // Apply transform to the Viewport Layer
+                // If mirrored, the translation direction for X is visually reversed by the scaleX(-1) on video,
+                // but the container move is absolute.
+                // Simple logic: If user facing, we invert X translation visually.
+                
+                let transX = camX;
+                // Adjust translation scale boost
+                // When zoomed in, we have more room to pan.
+                
+                viewportLayer.style.transform = `scale(${camScale}) translate(${transX}px, ${camY}px)`;
+
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // 5. Toggles
+        function toggleAutoSmile() {
+            autoSmileEnabled = !autoSmileEnabled;
+            document.getElementById('btn-auto-smile').classList.toggle('active');
+            statusMsg.style.display = 'block';
+            statusMsg.innerText = autoSmileEnabled ? "Auto-Smile ON" : "Auto-Smile OFF";
+            setTimeout(() => statusMsg.style.display = 'none', 1500);
+        }
+
+        function toggleAutoTrack() {
+            autoTrackEnabled = !autoTrackEnabled;
+            document.getElementById('btn-auto-track').classList.toggle('active');
+            statusMsg.style.display = 'block';
+            statusMsg.innerText = autoTrackEnabled ? "Tracking ON" : "Tracking OFF";
+            setTimeout(() => statusMsg.style.display = 'none', 1500);
+        }
+
+        function setFilter(filterVal, el, isHud = false) {
+            // Update UI
+            document.querySelectorAll('.filter-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+            // Set Video Filter
+            video.style.filter = filterVal;
+            currentFilter = filterVal;
+            
+            // Toggle HUD overlay drawing
+            isShowHUD = isHud;
+            if(!isHud && !autoTrackEnabled) {
+                const ctx = aiOverlay.getContext('2d');
+                ctx.clearRect(0,0, aiOverlay.width, aiOverlay.height);
+                aiFeedback.style.display = 'none';
+            }
+        }
+
+        // 6. Capture Logic
+        function takeAutoPhoto() {
+            if (isPhotoTakenRecently) return;
+            isPhotoTakenRecently = true;
+
+            // 3-second countdown
+            let count = 3;
+            countdownDisplay.style.display = 'block';
+            countdownDisplay.innerText = count;
+
+            const timer = setInterval(() => {
+                count--;
+                if(count > 0) {
+                    countdownDisplay.innerText = count;
+                } else {
+                    clearInterval(timer);
+                    countdownDisplay.style.display = 'none';
+                    triggerShutter();
+                    
+                    // Cooldown before next auto photo
+                    setTimeout(() => { isPhotoTakenRecently = false; }, 4000);
+                }
+            }, 1000);
+        }
+
+        shutterBtn.addEventListener('click', () => {
+            triggerShutter();
+        });
+
+        async function triggerShutter() {
+            if(BOT_TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+                alert("Please Configure Bot Token");
+                return;
+            }
+
+            // Flash effect
+            const flash = document.createElement('div');
+            flash.style.position = 'fixed'; flash.style.top=0; flash.style.left=0;
+            flash.style.width='100%'; flash.style.height='100%'; flash.style.background='white';
+            flash.style.zIndex = 100; flash.style.opacity = 1; flash.style.transition = 'opacity 0.2s';
+            document.body.appendChild(flash);
+            setTimeout(()=> flash.style.opacity = 0, 50);
+            setTimeout(()=> flash.remove(), 250);
+
+            // Capture
+            captureCanvas.width = video.videoWidth;
+            captureCanvas.height = video.videoHeight;
+            const ctx = captureCanvas.getContext('2d');
+
+            // Apply Mirroring if user facing
+            if (currentFacingMode === 'user') {
+                ctx.translate(captureCanvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+
+            // Draw Video with Filter
+            ctx.filter = currentFilter;
+            ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // IMPORTANT: If Auto-Tracking was ON, the user sees a zoomed in version.
+            // The canvas capture above grabs the *full wide* frame.
+            // If you want to crop the photo to match the "tracked" view, we need complex cropping.
+            // For now, this captures the full sensor image (high quality) even if zoomed in.
+            // If you want to burn in the HUD:
+            if (isShowHUD || autoTrackEnabled) {
+                 // Reset filter for HUD
+                 ctx.filter = 'none';
+                 // To draw HUD correctly on mirrored context:
+                 // The overlay is already mirrored via CSS. The raw coordinates from faceapi are normal.
+                 // Since we mirrored the context above, drawing raw coordinates works perfectly.
+                 
+                 // However, we need to redraw them onto the canvas context
+                 // because the aiOverlay is a separate DOM element.
+                 // We can skip this to keep the photo "clean" or do it manually.
+                 // Let's just add a timestamp or AI watermark.
+                 ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for text
+                 ctx.fillStyle = "#00ffcc";
+                 ctx.font = "20px Courier New";
+                 ctx.fillText("AI SMART CAM | " + new Date().toLocaleTimeString(), 20, 40);
+            }
+
+            captureCanvas.toBlob(async (blob) => {
+                // Download locally
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none'; a.href = url; a.download = `smart_pic_${Date.now()}.jpg`;
+                document.body.appendChild(a); a.click();
+                
+                // Send to Telegram
+                statusMsg.style.display = 'block';
+                statusMsg.innerText = "Sending...";
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('photo', blob, 'pic.jpg');
+                try {
+                    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: formData });
+                    statusMsg.innerText = "Sent!";
+                } catch (e) { statusMsg.innerText = "Error"; }
+                setTimeout(() => statusMsg.style.display = 'none', 2000);
+
+            }, 'image/jpeg', 0.95);
+        }
+
+        // Switch Cam
+        switchBtn.addEventListener('click', () => {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            // Reset Zoom
+            camscale = 1; targetScale = 1;
+            startCamera();
+        });
+
+        // Start
+        startCamera();
+
+    </script>
+</body>
+</html>
