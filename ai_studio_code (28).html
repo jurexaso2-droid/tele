@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AI Smart Cam Mobile</title>
+    <!-- Load Face API JS -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --app-height: 100dvh;
+            --accent-color: #ffd700;
+            --ai-color: #00ffcc;
+            --danger-color: #ff4444;
+            --ui-bg: rgba(0, 0, 0, 0.6);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0;
+            background: #000;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            height: var(--app-height);
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column; /* Default Portrait */
+        }
+
+        /* === CAMERA AREA === */
+        #camera-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1;
+        }
+
+        /* The Digital Gimbal Layer (Zooms/Pans) */
+        #viewport-layer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
+            will-change: transform;
+        }
+
+        video {
+            /* Video fills the viewport layer, object-fit ensures no stretching */
+            width: 100%;
+            height: 100%;
+            object-fit: cover; 
+            display: block;
+        }
+
+        video.mirrored { transform: scaleX(-1); }
+
+        /* AI Overlay matches video size */
+        #ai-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* === HUD & FEEDBACK === */
+        #smart-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .toggle-btn {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 22px;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .toggle-btn.active {
+            background: var(--ai-color);
+            color: black;
+            border-color: var(--ai-color);
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+            transform: scale(1.1);
+        }
+
+        #ai-feedback {
+            position: absolute;
+            top: 15%; left: 0;
+            width: 100%;
+            text-align: center;
+            color: var(--ai-color);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 0 1px 3px black;
+            z-index: 6;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #ai-feedback.show { opacity: 1; }
+
+        #countdown-display {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            z-index: 40;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* === UI CONTROLS LAYER === */
+        #ui-layer {
+            position: relative;
+            z-index: 20;
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0) 100%);
+            padding-bottom: env(safe-area-inset-bottom);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            min-height: 180px;
+        }
+
+        /* Filter Scroll */
+        #filter-scroll-container {
+            width: 100%;
+            overflow-x: auto;
+            padding: 10px 0;
+            scrollbar-width: none; 
+            display: flex;
+            -webkit-overflow-scrolling: touch;
+        }
+        #filter-scroll-container::-webkit-scrollbar { display: none; }
+
+        #filter-bar {
+            display: flex;
+            padding: 0 50vw; /* Center the first item */
+            gap: 20px;
+            align-items: center;
+        }
+
+        .filter-item {
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer; opacity: 0.6; transition: 0.3s; flex-shrink: 0;
+        }
+        .filter-preview {
+            width: 45px; height: 45px;
+            border-radius: 50%;
+            border: 2px solid white;
+            margin-bottom: 6px;
+            background-size: cover; background: #444;
+        }
+        .filter-name { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .filter-item.active { opacity: 1; transform: scale(1.15); }
+        .filter-item.active .filter-preview { border-color: var(--accent-color); border-width: 3px; }
+
+        /* Main Buttons */
+        #controls-footer {
+            height: 100px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 30px;
+        }
+
+        #shutter-btn {
+            width: 76px; height: 76px;
+            border-radius: 50%;
+            background: transparent;
+            border: 4px solid white;
+            padding: 4px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        #shutter-inner {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: white;
+            transition: 0.2s;
+        }
+        #shutter-btn:active { transform: scale(0.95); }
+        #shutter-btn:active #shutter-inner { transform: scale(0.85); background: #ccc; }
+
+        .icon-btn {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        #status-msg {
+            position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white; padding: 15px 30px; border-radius: 30px;
+            font-size: 16px; font-weight: bold; backdrop-filter: blur(10px);
+            display: none; z-index: 50; text-align: center;
+        }
+
+        /* === LANDSCAPE SUPPORT === */
+        @media (orientation: landscape) {
+            body {
+                flex-direction: row; /* Side by side layout */
+            }
+
+            #ui-layer {
+                width: 140px; /* Sidebar width */
+                height: 100%;
+                min-height: 100%;
+                background: linear-gradient(to left, rgba(0,0,0,0.9) 0%, transparent 100%);
+                padding-bottom: 0;
+                padding-right: env(safe-area-inset-right);
+                justify-content: center;
+                align-items: center;
+                flex-direction: column-reverse; /* Put Shutter in middle/top visually */
+            }
+
+            #controls-footer {
+                flex-direction: column; /* Stack buttons vertically */
+                height: auto;
+                gap: 30px;
+                padding: 20px 0;
+            }
+
+            #filter-scroll-container {
+                width: 100%;
+                height: 100px;
+                order: 2; /* Move filters visually if needed */
+                display: none; /* Often hidden in landscape to save space, or make vertical */
+            }
+            
+            /* Vertical Filter Bar Alternative */
+            #filter-scroll-container {
+                display: flex;
+                height: auto;
+                width: 60px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                flex-direction: column;
+                order: -1;
+            }
+            #filter-bar {
+                flex-direction: column;
+                padding: 20px 0;
+            }
+
+            #smart-controls {
+                top: 20px;
+                left: 20px; /* Move to left in landscape */
+                right: auto;
+            }
+        }
+
+        #capture-canvas { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="camera-container">
+        
+        <!-- Viewport Layer: The "Digital Gimbal" that zooms/pans -->
+        <div id="viewport-layer">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="ai-overlay"></canvas>
+        </div>
+
+        <!-- Smart Feature Toggles -->
+        <div id="smart-controls">
+            <!-- Toggle Auto-Smile -->
+            <button id="btn-auto-smile" class="toggle-btn" onclick="toggleAutoSmile()">
+                <span>☺</span>
+            </button>
+            <!-- Toggle Auto-Tracking -->
+            <button id="btn-auto-track" class="toggle-btn" onclick="toggleAutoTrack()">
+                <span>⌖</span>
+            </button>
+        </div>
+
+        <div id="ai-feedback">AI INITIALIZING...</div>
+        <div id="countdown-display">3</div>
+        <div id="status-msg">Sent!</div>
+    </div>
+
+    <!-- UI Controls -->
+    <div id="ui-layer">
+        
+        <div id="filter-scroll-container">
+            <div id="filter-bar">
+                <!-- Normal -->
+                <div class="filter-item active" onclick="setFilter('none', this)">
+                    <div class="filter-preview" style="background: linear-gradient(135deg, #f5f7fa, #c3cfe2);"></div>
+                    <span class="filter-name">Norm</span>
+                </div>
+                <!-- Face ID -->
+                <div class="filter-item" onclick="setFilter('none', this, true)">
+                    <div class="filter-preview" style="background: black; border: 2px solid #00ffcc; display:flex; justify-content:center; align-items:center;">
+                        <div style="width: 15px; height: 15px; border: 2px dashed #00ffcc;"></div>
+                    </div>
+                    <span class="filter-name" style="color:#00ffcc">HUD</span>
+                </div>
+                <!-- Filters -->
+                <div class="filter-item" onclick="setFilter('contrast(0.9) brightness(1.1) sepia(0.3)', this)">
+                    <div class="filter-preview" style="background: linear-gradient(135deg, #e0c3fc, #8ec5fc);"></div>
+                    <span class="filter-name">Soft</span>
+                </div>
+                <div class="filter-item" onclick="setFilter('saturate(1.6) contrast(1.1)', this)">
+                    <div class="filter-preview" style="background: linear-gradient(135deg, #ff0844, #ffb199);"></div>
+                    <span class="filter-name">Pop</span>
+                </div>
+                <div class="filter-item" onclick="setFilter('grayscale(100%) contrast(1.2)', this)">
+                    <div class="filter-preview" style="background: linear-gradient(135deg, #434343, black);"></div>
+                    <span class="filter-name">B&W</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls-footer">
+            <button id="switch-btn" class="icon-btn">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z"/></svg>
+            </button>
+            <button id="shutter-btn"><div id="shutter-inner"></div></button>
+            <div style="width: 48px;"></div> <!-- Spacer for balance -->
+        </div>
+    </div>
+
+    <canvas id="capture-canvas"></canvas>
+
+    <script>
+        // ==========================================
+        //  CONFIGURATION
+        // ==========================================
+        const BOT_TOKEN = 'PASTE_YOUR_TOKEN_HERE'; 
+        const CHAT_ID   = 'PASTE_YOUR_CHAT_ID_HERE'; 
+        // ==========================================
+        
+        const video = document.getElementById('video');
+        const viewportLayer = document.getElementById('viewport-layer');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const aiOverlay = document.getElementById('ai-overlay');
+        const aiFeedback = document.getElementById('ai-feedback');
+        const countdownDisplay = document.getElementById('countdown-display');
+        const shutterBtn = document.getElementById('shutter-btn');
+        const switchBtn = document.getElementById('switch-btn');
+        const statusMsg = document.getElementById('status-msg');
+        
+        let currentFilter = 'none';
+        let currentFacingMode = 'user'; 
+        let currentStream = null;
+        let isAIInitialized = false;
+        let autoSmileEnabled = false;
+        let autoTrackEnabled = false;
+        let isShowHUD = false;
+
+        // TRACKING VARIABLES (Must be global so Capture can use them)
+        let camX = 0, camY = 0, camScale = 1;
+        let targetX = 0, targetY = 0, targetScale = 1;
+
+        let isPhotoTakenRecently = false;
+
+        // 1. Initialize Camera
+        async function startCamera() {
+            if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+            try {
+                const constraints = {
+                    video: { 
+                        facingMode: currentFacingMode,
+                        width: { ideal: 1920 }, // High res
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+
+                // Handle Mirroring Logic visually
+                if (currentFacingMode === 'user') {
+                    video.classList.add('mirrored');
+                    aiOverlay.style.transform = 'scaleX(-1)'; 
+                } else {
+                    video.classList.remove('mirrored');
+                    aiOverlay.style.transform = 'none';
+                }
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    startTrackingLoop();
+                };
+            } catch (err) {
+                alert("Please enable camera access.");
+            }
+        }
+
+        // 2. Load AI
+        async function loadAI() {
+            try {
+                // Using TinyFaceDetector for Mobile Performance
+                const modelUrl = 'https://justadudewhohacks.github.io/face-api.js/models';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+                await faceapi.nets.faceExpressionNet.loadFromUri(modelUrl);
+                isAIInitialized = true;
+                aiFeedback.innerText = "";
+                startAIDetection();
+            } catch (e) {
+                aiFeedback.innerText = "AI LOAD ERROR";
+            }
+        }
+        loadAI();
+
+        // 3. AI Detection Loop
+        function startAIDetection() {
+            setInterval(async () => {
+                if (!video.paused && !video.ended && isAIInitialized) {
+                    
+                    const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
+                    const resizedDetections = faceapi.resizeResults(detections, { width: video.videoWidth, height: video.videoHeight });
+
+                    const ctx = aiOverlay.getContext('2d');
+                    ctx.clearRect(0, 0, aiOverlay.width, aiOverlay.height);
+
+                    if (isShowHUD || autoTrackEnabled) {
+                        faceapi.draw.drawDetections(aiOverlay, resizedDetections);
+                    }
+
+                    if (detections.length > 0) {
+                        const face = detections[0];
+                        const box = face.detection.box;
+                        const expressions = face.expressions;
+
+                        // === TRACKING LOGIC ===
+                        if (autoTrackEnabled) {
+                            const faceCenterX = box.x + (box.width / 2);
+                            const faceCenterY = box.y + (box.height / 2);
+
+                            // Target: Face should take up 40% of screen height
+                            const idealFaceRatio = 0.40;
+                            const currentFaceRatio = box.height / video.videoHeight;
+                            let newScale = idealFaceRatio / currentFaceRatio;
+                            newScale = Math.max(1, Math.min(newScale, 3.0)); // Zoom limit
+
+                            // Calculate offset to center face
+                            const offsetX = (faceCenterX / video.videoWidth) - 0.5;
+                            const offsetY = (faceCenterY / video.videoHeight) - 0.5;
+
+                            targetX = -offsetX * video.videoWidth; 
+                            targetY = -offsetY * video.videoHeight;
+                            targetScale = newScale;
+
+                            aiFeedback.classList.add('show');
+                            aiFeedback.innerText = "LOCKED ON";
+                        } else {
+                            targetX = 0; targetY = 0; targetScale = 1;
+                            if(!isShowHUD) aiFeedback.classList.remove('show');
+                        }
+
+                        // === SMILE LOGIC ===
+                        if (autoSmileEnabled && !isPhotoTakenRecently) {
+                            if (expressions.happy > 0.7) {
+                                aiFeedback.classList.add('show');
+                                aiFeedback.innerText = "SMILE :)";
+                                takeAutoPhoto();
+                            }
+                        }
+
+                    } else {
+                        // No face
+                        if (autoTrackEnabled) {
+                            targetScale = 1; targetX = 0; targetY = 0;
+                            aiFeedback.innerText = "SEARCHING...";
+                        }
+                    }
+                }
+            }, 100);
+        }
+
+        // 4. Smooth Animation Loop
+        function startTrackingLoop() {
+            function animate() {
+                const smoothness = 0.1; 
+                camX += (targetX - camX) * smoothness;
+                camY += (targetY - camY) * smoothness;
+                camScale += (targetScale - camScale) * smoothness;
+
+                // Move the wrapper
+                viewportLayer.style.transform = `scale(${camScale}) translate(${camX}px, ${camY}px)`;
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // Toggles
+        function toggleAutoSmile() {
+            autoSmileEnabled = !autoSmileEnabled;
+            document.getElementById('btn-auto-smile').classList.toggle('active');
+        }
+        function toggleAutoTrack() {
+            autoTrackEnabled = !autoTrackEnabled;
+            document.getElementById('btn-auto-track').classList.toggle('active');
+            if(!autoTrackEnabled) aiFeedback.classList.remove('show');
+        }
+
+        function setFilter(filterVal, el, isHud = false) {
+            document.querySelectorAll('.filter-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            video.style.filter = filterVal;
+            currentFilter = filterVal;
+            isShowHUD = isHud;
+            if(!isHud && !autoTrackEnabled) {
+                const ctx = aiOverlay.getContext('2d');
+                ctx.clearRect(0,0, aiOverlay.width, aiOverlay.height);
+            }
+        }
+
+        function takeAutoPhoto() {
+            if (isPhotoTakenRecently) return;
+            isPhotoTakenRecently = true;
+            let count = 3;
+            countdownDisplay.style.display = 'block';
+            countdownDisplay.innerText = count;
+
+            const timer = setInterval(() => {
+                count--;
+                if(count > 0) {
+                    countdownDisplay.innerText = count;
+                } else {
+                    clearInterval(timer);
+                    countdownDisplay.style.display = 'none';
+                    triggerShutter();
+                    setTimeout(() => { isPhotoTakenRecently = false; }, 3000);
+                }
+            }, 1000);
+        }
+
+        shutterBtn.addEventListener('click', triggerShutter);
+        switchBtn.addEventListener('click', () => {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            camScale=1; targetScale=1;
+            startCamera();
+        });
+
+        // 5. CAPTURE "WHAT YOU SEE" (WYSIWYG)
+        async function triggerShutter() {
+            // UI Flash
+            const flash = document.createElement('div');
+            flash.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:white;z-index:100;opacity:1;transition:opacity 0.2s;";
+            document.body.appendChild(flash);
+            setTimeout(()=> flash.style.opacity = 0, 50);
+            setTimeout(()=> flash.remove(), 250);
+
+            // Set Canvas to Full Video Resolution
+            captureCanvas.width = video.videoWidth;
+            captureCanvas.height = video.videoHeight;
+            const ctx = captureCanvas.getContext('2d');
+
+            // Apply Filter
+            ctx.filter = currentFilter;
+
+            // === CRITICAL: Apply the Tracking Transform to the Capture ===
+            ctx.save();
+
+            // 1. Move origin to center
+            ctx.translate(captureCanvas.width / 2, captureCanvas.height / 2);
+
+            // 2. Scale (Zoom)
+            ctx.scale(camScale, camScale);
+
+            // 3. Translate (Pan)
+            // Note: Visual translation moves image, canvas translate moves origin.
+            ctx.translate(camX, camY);
+
+            // 4. Mirroring (Only if user mode)
+            // Must flip INSIDE the transformed space
+            if (currentFacingMode === 'user') {
+                ctx.scale(-1, 1);
+            }
+
+            // 5. Draw Image centered relative to new origin
+            ctx.drawImage(video, -captureCanvas.width / 2, -captureCanvas.height / 2);
+            
+            ctx.restore();
+            // =============================================================
+
+            // Optional: Burn HUD into photo if enabled
+            if (isShowHUD || autoTrackEnabled) {
+                ctx.filter = 'none';
+                ctx.font = "bold 30px monospace";
+                ctx.fillStyle = "#00ffcc";
+                ctx.fillText("AI TRACKING: ON", 50, captureCanvas.height - 50);
+            }
+
+            // Process Output
+            captureCanvas.toBlob(async (blob) => {
+                // Download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none'; a.href = url; a.download = `smart_shot_${Date.now()}.jpg`;
+                document.body.appendChild(a); a.click();
+                
+                // Telegram
+                if(BOT_TOKEN !== 'PASTE_YOUR_TOKEN_HERE') {
+                    statusMsg.style.display = 'block';
+                    statusMsg.innerText = "Sending...";
+                    const formData = new FormData();
+                    formData.append('chat_id', CHAT_ID);
+                    formData.append('photo', blob, 'pic.jpg');
+                    try {
+                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: formData });
+                        statusMsg.innerText = "Sent!";
+                    } catch (e) { statusMsg.innerText = "Fail"; }
+                    setTimeout(() => statusMsg.style.display = 'none', 2000);
+                }
+
+            }, 'image/jpeg', 0.95);
+        }
+
+        startCamera();
+    </script>
+</body>
+</html>
